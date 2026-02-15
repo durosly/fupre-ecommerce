@@ -2,111 +2,98 @@ import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { v4 as uuid } from "uuid";
 import { product } from "../lib/db/schema";
+import fs from "fs";
+import path from "path";
 
 const sqlite = new Database("sqlite.db");
 sqlite.pragma("journal_mode = WAL");
 sqlite.pragma("foreign_keys = ON");
 const db = drizzle(sqlite);
 
-async function seed() {
-	console.log("🌱 Seeding products...");
+const PRODUCTS_DIR = path.join(process.cwd(), "public", "uploads", "products");
 
-	const demoProducts = [
-		{
-			id: uuid(),
-			name: "Premium Wireless Headphones",
-			description:
-				"Immersive sound quality with active noise cancellation. Features 30-hour battery life, premium comfort padding, and seamless Bluetooth 5.2 connectivity for an unmatched listening experience.",
-			price: 45000,
-			imageUrl: "/uploads/products/headphones.jpg",
-			stock: 25,
-			category: "electronics",
-			createdAt: new Date(),
-		},
-		{
-			id: uuid(),
-			name: "Leather Crossbody Bag",
-			description:
-				"Handcrafted genuine leather crossbody bag with adjustable strap. Features multiple compartments, magnetic closure, and a timeless design perfect for everyday use.",
-			price: 32000,
-			imageUrl: "/uploads/products/bag.jpg",
-			stock: 15,
-			category: "fashion",
-			createdAt: new Date(),
-		},
-		{
-			id: uuid(),
-			name: "Smart Fitness Watch",
-			description:
-				"Track your health and fitness goals with this advanced smartwatch. Heart rate monitoring, GPS tracking, sleep analysis, and 7-day battery life in a sleek waterproof design.",
-			price: 55000,
-			imageUrl: "/uploads/products/watch.jpg",
-			stock: 30,
-			category: "electronics",
-			createdAt: new Date(),
-		},
-		{
-			id: uuid(),
-			name: "Organic Face Serum",
-			description:
-				"Rejuvenate your skin with our all-natural vitamin C serum. Made with organic ingredients, this lightweight formula brightens, hydrates, and reduces fine lines for a radiant glow.",
-			price: 12000,
-			imageUrl: "/uploads/products/serum.jpg",
-			stock: 50,
-			category: "beauty",
-			createdAt: new Date(),
-		},
-		{
-			id: uuid(),
-			name: "Mechanical Keyboard",
-			description:
-				"Professional-grade mechanical keyboard with Cherry MX Blue switches, RGB backlighting, and aircraft-grade aluminum body. Perfect for typing enthusiasts and gamers.",
-			price: 38000,
-			imageUrl: "/uploads/products/keyboard.jpg",
-			stock: 20,
-			category: "electronics",
-			createdAt: new Date(),
-		},
-		{
-			id: uuid(),
-			name: "Running Sneakers Pro",
-			description:
-				"Engineered for performance with responsive cushioning and breathable mesh upper. Lightweight carbon-fiber plate for energy return. Available in multiple colorways.",
-			price: 28000,
-			imageUrl: "/uploads/products/sneakers.jpg",
-			stock: 35,
-			category: "fashion",
-			createdAt: new Date(),
-		},
-		{
-			id: uuid(),
-			name: "Aromatherapy Candle Set",
-			description:
-				"Hand-poured soy wax candles in three calming scents: Lavender, Eucalyptus, and Vanilla. Burns for 40+ hours each. Perfect for relaxation and home ambiance.",
-			price: 8500,
-			imageUrl: "/uploads/products/candles.jpg",
-			stock: 40,
-			category: "home",
-			createdAt: new Date(),
-		},
-		{
-			id: uuid(),
-			name: "Portable Bluetooth Speaker",
-			description:
-				"Compact yet powerful 20W speaker with 360-degree surround sound. Waterproof IPX7 rating, 12-hour playtime, and built-in microphone for hands-free calls.",
-			price: 22000,
-			imageUrl: "/uploads/products/speaker.jpg",
-			stock: 30,
-			category: "electronics",
-			createdAt: new Date(),
-		},
-	];
+interface DummyProduct {
+	id: number;
+	title: string;
+	description: string;
+	price: number;
+	stock: number;
+	category: string;
+	thumbnail: string;
+}
 
-	for (const p of demoProducts) {
-		await db.insert(product).values(p).onConflictDoNothing();
+/**
+ * Downloads an image from a URL and saves it locally.
+ */
+async function downloadImage(url: string, filename: string): Promise<string> {
+	const res = await fetch(url);
+	if (!res.ok) {
+		throw new Error(`Failed to download image: ${url} (${res.status})`);
 	}
 
-	console.log(`✅ Seeded ${demoProducts.length} products`);
+	const buffer = Buffer.from(await res.arrayBuffer());
+	const filePath = path.join(PRODUCTS_DIR, filename);
+	fs.writeFileSync(filePath, buffer);
+
+	return filename;
+}
+
+/**
+ * Derives a clean filename from the product title.
+ * e.g. "Essence Mascara Lash Princess" -> "essence-mascara-lash-princess.webp"
+ */
+function slugify(title: string, ext: string = ".webp"): string {
+	return (
+		title
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, "-")
+			.replace(/(^-|-$)/g, "") + ext
+	);
+}
+
+async function seed() {
+	console.log("🌱 Seeding products from DummyJSON...\n");
+
+	// Ensure the images directory exists
+	fs.mkdirSync(PRODUCTS_DIR, { recursive: true });
+
+	// 1. Fetch 10 products from DummyJSON
+	const response = await fetch("https://dummyjson.com/products?limit=10");
+	if (!response.ok) {
+		throw new Error(`API request failed with status ${response.status}`);
+	}
+
+	const data = (await response.json()) as { products: DummyProduct[] };
+	const apiProducts = data.products;
+
+	console.log(`📦 Fetched ${apiProducts.length} products from API\n`);
+
+	// 2. Process each product: download image + insert into DB
+	for (const p of apiProducts) {
+		const filename = slugify(p.title);
+
+		// Download the thumbnail image
+		console.log(`  ⬇️  Downloading image for "${p.title}"...`);
+		await downloadImage(p.thumbnail, filename);
+		console.log(`  ✅ Saved as ${filename}`);
+
+		// Map to our product schema
+		const productData = {
+			id: uuid(),
+			name: p.title,
+			description: p.description,
+			price: p.price,
+			imageUrl: `/uploads/products/${filename}`,
+			stock: p.stock,
+			category: p.category,
+			createdAt: new Date(),
+		};
+
+		await db.insert(product).values(productData).onConflictDoNothing();
+		console.log(`  💾 Inserted "${p.title}" into database\n`);
+	}
+
+	console.log(`\n✅ Seeded ${apiProducts.length} products successfully!`);
 	sqlite.close();
 	process.exit(0);
 }
