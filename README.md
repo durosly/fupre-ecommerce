@@ -58,8 +58,10 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 ```bash
 npm run db:push    # Push schema to SQLite
-npm run db:seed    # Seed demo products
+npm run db:seed    # Seed demo products (Requires Internet Connection)
 ```
+
+> **Note**: The seed script fetches products from DummyJSON and downloads images locally. An active internet connection is required for this step.
 
 ### 4. Run Development Server
 
@@ -107,23 +109,29 @@ Open [http://localhost:3000](http://localhost:3000) to view the application.
 
 ## Creating an Admin User
 
-1. Sign up normally at `/auth/signup`
-2. Open the SQLite database and update the user's role:
-      ```sql
-      UPDATE user SET role = 'admin' WHERE email = 'your@email.com';
+1. Sign up normally at `/auth/signup`.
+2. Open Drizzle Studio to update your user role:
+      ```bash
+      npm run db:studio
       ```
-      Or use any SQLite GUI tool to edit the `role` column.
+3. In Drizzle Studio, find the `user` table, locate your account, and change the `role` column from `user` to `admin`.
+4. After saving the changes in Studio, log in (or refresh if already logged in).
+
+### Admin Access
+
+Once logged in as an admin, an "Admin" link will automatically appear in the navigation header, granting access to the [Admin Dashboard](/admin).
 
 ## Scripts
 
-| Script                | Description              |
-| --------------------- | ------------------------ |
-| `npm run dev`         | Start development server |
-| `npm run build`       | Build for production     |
-| `npm run start`       | Start production server  |
-| `npm run db:push`     | Push schema to database  |
-| `npm run db:seed`     | Seed demo products       |
-| `npm run db:generate` | Generate migrations      |
+| Script                | Description                                       |
+| --------------------- | ------------------------------------------------- |
+| `npm run dev`         | Start development server                          |
+| `npm run build`       | Build for production                              |
+| `npm run start`       | Start production server                           |
+| `npm run db:push`     | Push schema to database                           |
+| `npm run db:seed`     | Seed demo products (Requires Internet Connection) |
+| `npm run db:studio`   | Open Drizzle Studio to manage database            |
+| `npm run db:generate` | Generate migrations                               |
 
 ## Design
 
